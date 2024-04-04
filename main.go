@@ -2,33 +2,46 @@ package main
 
 import (
 	"log"
-	"reflect"
 
 	"github.com/probablynotkai/connection"
 )
 
+var (
+	ConnectionChannel = make(chan bool)
+)
+
 func main() {
-	myConnection := connection.FlatConnection{
-		FileLocation: "data.json",
+	fc := &connection.FlatConnection{
+		Directory: "C:\\Users\\kharrison\\Documents\\AuthK",
 	}
 
-	connectToDataSource(myConnection)
+	go fc.Connect(ConnectionChannel)
 
-	user := &myConnection.GetUsers()[0]
-	myConnection.Grant(user, "test_permission")
-}
+	_ = <-ConnectionChannel
 
-func connectToDataSource(source any) {
-	if source == nil {
-		log.Fatal("nil data source provided")
-		return
-	}
+	users := fc.GetUsers()
+	if len(*users) == 0 {
+		user, err := fc.CreateUser("CouldBeKai")
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
 
-	if reflect.TypeOf(source).Name() == "FlatConnection" {
-		dataSource := source.(connection.FlatConnection)
-		dataSource.Connect()
-	} else if reflect.TypeOf(source).Name() == "SQLConnection" {
-		dataSource := source.(connection.SQLConnection)
-		dataSource.Connect()
+		log.Println("No users exist, created " + user.Name)
 	}
 }
+
+// func connectToDataSource(source any) {
+// 	if source == nil {
+// 		log.Fatal("nil data source provided")
+// 		return
+// 	}
+
+// 	if reflect.TypeOf(source).Name() == "FlatConnection" {
+// 		dataSource := source.(connection.FlatConnection)
+// 		dataSource.Connect()
+// 	} else if reflect.TypeOf(source).Name() == "SQLConnection" {
+// 		dataSource := source.(connection.SQLConnection)
+// 		dataSource.Connect()
+// 	}
+// }

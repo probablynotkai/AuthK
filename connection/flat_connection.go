@@ -10,66 +10,173 @@ import (
 )
 
 var users []objects.User
+var groups []objects.Group
 
 type FlatConnection struct {
-	FileLocation string
+	Directory string
+
+	userPath  string
+	groupPath string
 }
 
-func (f FlatConnection) Connect() {
+type storedGroup struct {
+	Id          int
+	Name        string
+	IsDefault   bool
+	Permissions []string
+	Inheritance []int
+}
+
+func (f *FlatConnection) Connect(complete chan<- bool) {
 	log.Println("Attempting to connect to flat file data source...")
 
-	_, err := os.Stat(f.FileLocation)
-	if err != nil {
-		log.Fatal(err)
-		return
+	f.userPath = f.Directory + "\\users.json"
+	f.groupPath = f.Directory + "\\groups.json"
+
+	if _, err := os.Stat(f.userPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			log.Println("users.json doesn't exist, creating now...")
+			err := os.WriteFile(f.userPath, []byte{}, os.ModePerm)
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+		} else {
+			log.Fatal(err)
+			return
+		}
 	}
 
-	data, err := os.ReadFile(f.FileLocation)
-	if err != nil {
-		log.Fatal(err)
-		return
+	if _, err := os.Stat(f.groupPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			log.Println("groups.json doesn't exist, creating now...")
+			err := os.WriteFile(f.groupPath, []byte{}, os.ModePerm)
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+		} else {
+			log.Fatal(err)
+			return
+		}
 	}
 
 	log.Println("Connected to flat file data source.")
 
-	var permissions objects.Permissions
-	json.Unmarshal(data, &permissions)
+	go f.LoadGroups()
+	go f.LoadUsers()
 
-	log.Println("Loading users and permissions...")
+	complete <- true
+}
 
-	for k, v := range permissions.PermissionsMap {
-		permissionArray := []string{}
-		for _, va := range v {
-			permissionArray = append(permissionArray, va)
-		}
+func (f *FlatConnection) LoadUsers() {
+	log.Println("Loading users...")
 
-		users = append(users, objects.User{
-			Name:        k,
-			Permissions: permissionArray,
-		})
+	userData, err := os.ReadFile(f.userPath)
+	if err != nil {
+		log.Fatal(err)
+		return
 	}
+
+	var storedUsers []objects.User
+	json.Unmarshal(userData, &storedUsers)
+
+	users = storedUsers
 
 	log.Println("Loaded users and permissions.")
 }
 
+// func (f *FlatConnection) LoadGroups() {
+// 	log.Println("Loading groups...")
+
+// 	groupData, err := os.ReadFile(f.groupPath)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 		return
+// 	}
+
+// 	var storedGroups []storedGroup
+// 	json.Unmarshal(groupData, &storedGroups)
+
+// 	groups = []objects.Group{}
+// 	for _, v := range storedGroups{
+// 	}
+
+// 	log.Println("Loaded groups.")
+// }
+
+func (f *FlatConnection) LoadGroups() {
+	log.Println("Loading groups...")
+
+	groupData, err := os.ReadFile(f.groupPath)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	var storedGroups = []storedGroup{}
+	json.Unmarshal(groupData, &storedGroups)
+
+	// Load excl. inheritance
+	for _, v := range storedGroups {
+		groups = append(groups, objects.Group{
+			Id:          v.Id,
+			Name:        v.Name,
+			IsDefault:   v.IsDefault,
+			Permissions: v.Permissions,
+		})
+	}
+
+	// Insert loaded groups to inheritance
+	for _, v := range storedGroups {
+		group := f.GetGroup(v.Id)
+
+		if group == nil {
+			continue
+		}
+
+		for _, w := range v.Inheritance {
+			parent := f.GetGroup(w)
+
+			group.Inheritance = append(group.Inheritance, *parent)
+		}
+	}
+
+	// for _, v := range groups {
+	// 	// iterate v.Inheritance
+	// 	//
+	// }
+}
+
 func (f *FlatConnection) Save() error {
-	data, err := json.Marshal(users)
+	userData, err := json.MarshalIndent(users, "", "    ")
 	if err != nil {
 		return err
 	}
 
-	os.WriteFile(f.FileLocation, data, os.ModePerm)
+	groupData, err := json.MarshalIndent(groups, "", "    ")
+	if err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(f.userPath, userData, os.ModePerm); err != nil {
+		return err
+	}
+	if err := os.WriteFile(f.groupPath, groupData, os.ModePerm); err != nil {
+		return err
+	}
 
 	return nil
 }
 
-func (f *FlatConnection) CreateUser(identifier string) (*objects.User, error) {
-	if identifier == "" {
-		return nil, errors.New("identifier cannot be nil")
+func (f *FlatConnection) CreateUser(name string) (*objects.User, error) {
+	if name == "" {
+		return nil, errors.New("identifier cannot be empty")
 	}
 
 	user := objects.User{
-		Name:        identifier,
+		Id:          getNextUserId(),
+		Name:        name,
 		Permissions: []string{},
 	}
 
@@ -78,62 +185,82 @@ func (f *FlatConnection) CreateUser(identifier string) (*objects.User, error) {
 	return &user, f.Save()
 }
 
-func (f *FlatConnection) Grant(u *objects.User, permission string) error {
-	if u == nil || permission == "" {
-		return errors.New("user and permission cannot be nil")
+func (f *FlatConnection) CreateGroup(name string) (*objects.Group, error) {
+	if name == "" {
+		return nil, errors.New("identifier cannot be empty")
 	}
 
-	alreadyHas := false
-	for _, v := range u.Permissions {
-		if v == permission {
-			alreadyHas = true
+	group := objects.Group{
+		Id:          getNextUserId(),
+		Name:        name,
+		IsDefault:   false,
+		Permissions: []string{},
+		Inheritance: []objects.Group{},
+	}
+
+	groups = append(groups, group)
+
+	return &group, f.Save()
+}
+
+func (f *FlatConnection) GetUsers() *[]objects.User {
+	return &users
+}
+
+func (f *FlatConnection) GetGroups() *[]objects.Group {
+	return &groups
+}
+
+func (f *FlatConnection) GetUser(id int) *objects.User {
+	for _, v := range *f.GetUsers() {
+		if v.Id == id {
+			return &v
 		}
 	}
 
-	if !alreadyHas {
-		u.Permissions = append(u.Permissions, permission)
-	}
-
-	return f.Save()
+	return nil
 }
 
-func (f *FlatConnection) Can(u *objects.User, permission string) (bool, error) {
-	if u == nil || permission == "" {
-		return false, errors.New("user or permission is nil")
-	}
-
-	for _, v := range u.Permissions {
-		if v == permission {
-			return true, nil
+func (f *FlatConnection) GetGroup(id int) *objects.Group {
+	for _, v := range *f.GetGroups() {
+		if v.Id == id {
+			return &v
 		}
 	}
-
-	return false, nil
+	return nil
 }
 
-func (f *FlatConnection) Revoke(u *objects.User, permission string) error {
-	if u == nil || permission == "" {
-		return errors.New("user and permission cannot be nil")
-	}
-
-	index := -1
-	for i := 0; i < len(u.Permissions); i++ {
-		if u.Permissions[i] == permission {
-			index = i
+func getNextUserId() int {
+	var (
+		last = 0
+	)
+	for _, v := range users {
+		if v.Id > last {
+			last = v.Id
 		}
 	}
-
-	if index == -1 {
-		return nil
-	}
-
-	// some fucking voodoo magic
-	u.Permissions[index] = u.Permissions[len(u.Permissions)-1] // replace target with end element
-	u.Permissions = u.Permissions[:len(u.Permissions)-1]       // replace with array -1 length
-
-	return f.Save()
+	return last + 1
 }
 
-func (f *FlatConnection) GetUsers() []objects.User {
-	return users
-}
+// func isCyclicalInheritance(g objects.Group) bool {
+// 	allGroups = []objects.Group{}
+// 	getNestedGroups(g.Inheritance, &allGroups)
+// }
+
+// func getNestedGroups(g []objects.Group, a *[]objects.Group) {
+// 	if len(g.Inheritance) == 0 {
+// 		return
+// 	} else {
+
+// 	}
+// }
+
+/*
+1. load all stored groups (inheritance is IDs)
+
+2. iterate stored groups, load into normal storage excluding inheritance
+
+3. iterate stored groups, get normal group by id (ref), iterate normal groups and ref inheritance ids, if normal group id = ref inheritance id, add to normal group inheritance (groups not ids)
+
+4. for range normal group 1 inheritance groups, recurse each inheritance group's inheritance groups for normal group 1's id, if exists, panic, no cyclical inheritance allowed
+*/
