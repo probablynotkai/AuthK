@@ -4,11 +4,11 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/probablynotkai/objects"
+	"github.com/probablynotkai/connection"
 )
 
 func main() {
-	myConnection := objects.FlatConnection{
+	myConnection := connection.FlatConnection{
 		FileLocation: "data.json",
 	}
 
@@ -25,10 +25,10 @@ func connectToDataSource(source any) {
 	}
 
 	if reflect.TypeOf(source).Name() == "FlatConnection" {
-		dataSource := source.(objects.FlatConnection)
+		dataSource := source.(connection.FlatConnection)
 		dataSource.Connect()
 	} else if reflect.TypeOf(source).Name() == "SQLConnection" {
-		dataSource := source.(objects.SQLConnection)
+		dataSource := source.(connection.SQLConnection)
 		dataSource.Connect()
 	}
 }

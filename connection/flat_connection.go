@@ -1,13 +1,15 @@
-package objects
+package connection
 
 import (
 	"encoding/json"
 	"errors"
 	"log"
 	"os"
+
+	"github.com/probablynotkai/objects"
 )
 
-var users []User
+var users []objects.User
 
 type FlatConnection struct {
 	FileLocation string
@@ -30,7 +32,7 @@ func (f FlatConnection) Connect() {
 
 	log.Println("Connected to flat file data source.")
 
-	var permissions Permissions
+	var permissions objects.Permissions
 	json.Unmarshal(data, &permissions)
 
 	log.Println("Loading users and permissions...")
@@ -41,7 +43,7 @@ func (f FlatConnection) Connect() {
 			permissionArray = append(permissionArray, va)
 		}
 
-		users = append(users, User{
+		users = append(users, objects.User{
 			Name:        k,
 			Permissions: permissionArray,
 		})
@@ -61,12 +63,12 @@ func (f *FlatConnection) Save() error {
 	return nil
 }
 
-func (f *FlatConnection) CreateUser(identifier string) (*User, error) {
+func (f *FlatConnection) CreateUser(identifier string) (*objects.User, error) {
 	if identifier == "" {
 		return nil, errors.New("identifier cannot be nil")
 	}
 
-	user := User{
+	user := objects.User{
 		Name:        identifier,
 		Permissions: []string{},
 	}
@@ -76,7 +78,7 @@ func (f *FlatConnection) CreateUser(identifier string) (*User, error) {
 	return &user, f.Save()
 }
 
-func (f *FlatConnection) Grant(u *User, permission string) error {
+func (f *FlatConnection) Grant(u *objects.User, permission string) error {
 	if u == nil || permission == "" {
 		return errors.New("user and permission cannot be nil")
 	}
@@ -95,7 +97,7 @@ func (f *FlatConnection) Grant(u *User, permission string) error {
 	return f.Save()
 }
 
-func (f *FlatConnection) Can(u *User, permission string) (bool, error) {
+func (f *FlatConnection) Can(u *objects.User, permission string) (bool, error) {
 	if u == nil || permission == "" {
 		return false, errors.New("user or permission is nil")
 	}
@@ -109,7 +111,7 @@ func (f *FlatConnection) Can(u *User, permission string) (bool, error) {
 	return false, nil
 }
 
-func (f *FlatConnection) Revoke(u *User, permission string) error {
+func (f *FlatConnection) Revoke(u *objects.User, permission string) error {
 	if u == nil || permission == "" {
 		return errors.New("user and permission cannot be nil")
 	}
@@ -132,6 +134,6 @@ func (f *FlatConnection) Revoke(u *User, permission string) error {
 	return f.Save()
 }
 
-func (f *FlatConnection) GetUsers() []User {
+func (f *FlatConnection) GetUsers() []objects.User {
 	return users
 }
