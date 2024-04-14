@@ -19,12 +19,19 @@ type FlatConnection struct {
 	groupPath string
 }
 
-type storedGroup struct {
+type StoredGroup struct {
 	Id          int
 	Name        string
 	IsDefault   bool
 	Permissions []string
 	Inheritance []int
+}
+
+type StoredUser struct {
+	Id          int
+	Name        string
+	GroupId     int
+	Permissions []string
 }
 
 func (f *FlatConnection) Connect() {
@@ -93,7 +100,7 @@ func (f *FlatConnection) LoadGroups() {
 		return
 	}
 
-	var storedGroups = []storedGroup{}
+	var storedGroups = []StoredGroup{}
 	json.Unmarshal(groupData, &storedGroups)
 
 	// Load excl. inheritance
@@ -135,12 +142,12 @@ func (f *FlatConnection) LoadGroups() {
 }
 
 func (f *FlatConnection) Save() error {
-	userData, err := json.MarshalIndent(users, "", "    ")
+	userData, err := json.MarshalIndent(formatUsers(users), "", "    ")
 	if err != nil {
 		return err
 	}
 
-	groupData, err := json.MarshalIndent(groups, "", "    ")
+	groupData, err := json.MarshalIndent(formatGroups(groups), "", "    ")
 	if err != nil {
 		return err
 	}
@@ -171,7 +178,7 @@ func (f *FlatConnection) CreateUser(name string) (*objects.User, error) {
 		Id:          getNextUserId(),
 		Name:        name,
 		Permissions: []string{},
-		GroupId:     defaultGroup.Id,
+		Group:       *defaultGroup,
 	}
 
 	users = append(users, user)
@@ -232,6 +239,43 @@ func (f *FlatConnection) GetDefaultGroup() *objects.Group {
 	}
 
 	return nil
+}
+
+func formatUsers(users []objects.User) []StoredUser {
+	formattedUsers := []StoredUser{}
+
+	for _, v := range users {
+		formattedUsers = append(formattedUsers, StoredUser{
+			Id:          v.Id,
+			Name:        v.Name,
+			GroupId:     v.Group.Id,
+			Permissions: v.Permissions,
+		})
+	}
+
+	return formattedUsers
+}
+
+func formatGroups(groups []objects.Group) []StoredGroup {
+	formattedGroups := []StoredGroup{}
+
+	for _, v := range groups {
+		inheritanceIds := []int{}
+
+		for _, i := range v.Inheritance {
+			inheritanceIds = append(inheritanceIds, i.Id)
+		}
+
+		formattedGroups = append(formattedGroups, StoredGroup{
+			Id:          v.Id,
+			Name:        v.Name,
+			IsDefault:   v.IsDefault,
+			Inheritance: inheritanceIds,
+			Permissions: v.Permissions,
+		})
+	}
+
+	return formattedGroups
 }
 
 func getNextUserId() int {

@@ -94,7 +94,7 @@ func (g *Group) Can(permission string) (bool, error) {
 		return false, errors.New("permission cannot be empty")
 	}
 
-	for _, v := range g.getAllPermissions() {
+	for _, v := range g.GetAllPermissions() {
 		if v == permission {
 			return true, nil
 		}
@@ -126,7 +126,7 @@ func (g *Group) Revoke(permission string) error {
 	return nil
 }
 
-func (g *Group) getAllPermissions() []string {
+func (g *Group) GetAllPermissions() []string {
 	all := []string{}
 	all = append(all, g.Permissions...)
 	for _, i := range g.Inheritance {

@@ -5,16 +5,16 @@ import "errors"
 type User struct {
 	Id          int
 	Name        string
-	GroupId     int
+	Group       Group
 	Permissions []string
 }
 
-func (u *User) SetGroup(id int) error {
-	if u == nil || id < 0 {
-		return errors.New("user and id cannot be nil")
+func (u *User) SetGroup(g Group) error {
+	if u == nil {
+		return errors.New("user cannot be nil")
 	}
 
-	u.GroupId = id
+	u.Group = g
 
 	return nil
 }
@@ -44,6 +44,12 @@ func (u *User) Can(permission string) (bool, error) {
 	}
 
 	for _, v := range u.Permissions {
+		if v == permission {
+			return true, nil
+		}
+	}
+
+	for _, v := range u.Group.GetAllPermissions() {
 		if v == permission {
 			return true, nil
 		}
