@@ -27,7 +27,7 @@ type storedGroup struct {
 	Inheritance []int
 }
 
-func (f *FlatConnection) Connect(complete chan<- bool) {
+func (f *FlatConnection) Connect() {
 	log.Println("Attempting to connect to flat file data source...")
 
 	f.userPath = f.Directory + "\\users.json"
@@ -63,10 +63,8 @@ func (f *FlatConnection) Connect(complete chan<- bool) {
 
 	log.Println("Connected to flat file data source.")
 
-	go f.LoadGroups()
-	go f.LoadUsers()
-
-	complete <- true
+	f.LoadGroups()
+	f.LoadUsers()
 }
 
 func (f *FlatConnection) LoadUsers() {
@@ -85,25 +83,6 @@ func (f *FlatConnection) LoadUsers() {
 
 	log.Println("Loaded users and permissions.")
 }
-
-// func (f *FlatConnection) LoadGroups() {
-// 	log.Println("Loading groups...")
-
-// 	groupData, err := os.ReadFile(f.groupPath)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 		return
-// 	}
-
-// 	var storedGroups []storedGroup
-// 	json.Unmarshal(groupData, &storedGroups)
-
-// 	groups = []objects.Group{}
-// 	for _, v := range storedGroups{
-// 	}
-
-// 	log.Println("Loaded groups.")
-// }
 
 func (f *FlatConnection) LoadGroups() {
 	log.Println("Loading groups...")
@@ -127,7 +106,9 @@ func (f *FlatConnection) LoadGroups() {
 		})
 	}
 
-	// Insert loaded groups to inheritance
+	var loadedGroups = []objects.Group{}
+
+	// Insert loaded groups to respective inheritance
 	for _, v := range storedGroups {
 		group := f.GetGroup(v.Id)
 
@@ -136,16 +117,21 @@ func (f *FlatConnection) LoadGroups() {
 		}
 
 		for _, w := range v.Inheritance {
+			if w == v.Id {
+				continue
+			}
+
 			parent := f.GetGroup(w)
 
 			group.Inheritance = append(group.Inheritance, *parent)
 		}
+
+		loadedGroups = append(loadedGroups, *group)
 	}
 
-	// for _, v := range groups {
-	// 	// iterate v.Inheritance
-	// 	//
-	// }
+	groups = loadedGroups
+
+	log.Println("Loaded groups and permissions...")
 }
 
 func (f *FlatConnection) Save() error {
@@ -174,10 +160,18 @@ func (f *FlatConnection) CreateUser(name string) (*objects.User, error) {
 		return nil, errors.New("identifier cannot be empty")
 	}
 
+	defaultGroup := f.GetDefaultGroup()
+	if defaultGroup == nil {
+		defaultGroup = &objects.Group{
+			Id: -1,
+		}
+	}
+
 	user := objects.User{
 		Id:          getNextUserId(),
 		Name:        name,
 		Permissions: []string{},
+		GroupId:     defaultGroup.Id,
 	}
 
 	users = append(users, user)
@@ -191,7 +185,7 @@ func (f *FlatConnection) CreateGroup(name string) (*objects.Group, error) {
 	}
 
 	group := objects.Group{
-		Id:          getNextUserId(),
+		Id:          getNextGroupId(),
 		Name:        name,
 		IsDefault:   false,
 		Permissions: []string{},
@@ -230,11 +224,33 @@ func (f *FlatConnection) GetGroup(id int) *objects.Group {
 	return nil
 }
 
+func (f *FlatConnection) GetDefaultGroup() *objects.Group {
+	for _, v := range *f.GetGroups() {
+		if v.IsDefault {
+			return &v
+		}
+	}
+
+	return nil
+}
+
 func getNextUserId() int {
 	var (
 		last = 0
 	)
 	for _, v := range users {
+		if v.Id > last {
+			last = v.Id
+		}
+	}
+	return last + 1
+}
+
+func getNextGroupId() int {
+	var (
+		last = 0
+	)
+	for _, v := range groups {
 		if v.Id > last {
 			last = v.Id
 		}

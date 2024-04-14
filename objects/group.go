@@ -2,7 +2,6 @@ package objects
 
 import (
 	"errors"
-	"log"
 )
 
 type Group struct {
@@ -95,7 +94,7 @@ func (g *Group) Can(permission string) (bool, error) {
 		return false, errors.New("permission cannot be empty")
 	}
 
-	for _, v := range g.Permissions {
+	for _, v := range g.getAllPermissions() {
 		if v == permission {
 			return true, nil
 		}
@@ -130,17 +129,15 @@ func (g *Group) Revoke(permission string) error {
 func (g *Group) getAllPermissions() []string {
 	all := []string{}
 	all = append(all, g.Permissions...)
-	getNestedPermissions(g, &all)
-
-	for _, v := range all {
-		log.Println(v)
+	for _, i := range g.Inheritance {
+		getNestedPermissions(g, &i, &all)
 	}
 
 	return all
 }
 
-func getNestedPermissions(g *Group, permissions *[]string) {
-	if g == nil {
+func getNestedPermissions(base *Group, g *Group, permissions *[]string) {
+	if g == nil || base.Name == g.Name {
 		return
 	}
 
@@ -148,7 +145,7 @@ func getNestedPermissions(g *Group, permissions *[]string) {
 
 	if len(g.Inheritance) > 0 {
 		for _, v := range g.Inheritance {
-			go getNestedPermissions(&v, permissions)
+			go getNestedPermissions(g, &v, permissions)
 		}
 	}
 }
