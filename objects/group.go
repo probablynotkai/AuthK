@@ -70,6 +70,11 @@ func (g *Group) SetDefault(isDefault bool) error {
 	return nil
 }
 
+/*
+Method to grant permission to a group.
+Ensure to save via your connection object to confirm changes.
+`Connection.Save()`
+*/
 func (g *Group) Grant(permission string) error {
 	if permission == "" {
 		return errors.New("permission cannot be empty")

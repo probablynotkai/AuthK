@@ -8,24 +8,28 @@ import (
 	"github.com/probablynotkai/connection"
 )
 
+var (
+	Connection *connection.FlatConnection
+)
+
 func main() {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	fc := &connection.FlatConnection{
-		Directory: "C:\\Users\\kaih2\\Desktop\\Development\\AuthK",
+	Connection = &connection.FlatConnection{
+		Directory: "",
 	}
 
 	go func() {
 		defer wg.Done()
-		connectToDataSource(fc)
+		connectToDataSource(Connection)
 	}()
 
 	wg.Wait()
 
-	// users := fc.GetUsers()
+	// users := Connection.GetUsers()
 	// if len(*users) == 0 {
-	// 	user, err := fc.CreateUser("CouldBeKai")
+	// 	user, err := Connection.CreateUser("CouldBeKai")
 	// 	if err != nil {
 	// 		log.Fatal(err)
 	// 		return
@@ -34,20 +38,35 @@ func main() {
 	// 	log.Println("No users exist, created " + user.Name)
 	// }
 
-	groups := fc.GetGroups()
-	for _, v := range *groups {
-		if v.Name == "admin" {
-			permitted, err := v.Can("write post")
+	groups := Connection.GetGroups()
+	for i := range *groups {
+		group := &(*groups)[i]
+
+		if group.Name == "admin" {
+			permitted, err := group.Can("write post")
 			if err != nil {
 				log.Fatal(err)
 				return
 			}
 
 			if permitted {
-				log.Println("Post has been created by " + v.Name + " role.")
+				log.Println("Post has been created by " + group.Name + " role.")
 			}
 		}
 	}
+
+	// group := Connection.GetGroup(1)
+	// if group != nil {
+	// 	err := group.Grant("test2")
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+
+	// 	err = Connection.Save()
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	// }
 }
 
 func connectToDataSource(source any) {
